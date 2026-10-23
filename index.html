@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#137333" />
+  <title>Sai Malhar Society Water Supply — Live Status</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #17212b; background: #f3f7f5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+    main { width: min(100%, 480px); background: white; border-radius: 24px; padding: 24px; box-shadow: 0 12px 40px #10251a16; }
+    header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+    .logo { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: white; background: #137333; font-size: 28px; }
+    h1 { font-size: 1.35rem; margin: 0; }
+    .sub { color: #65736b; margin: 5px 0 0; font-size: .92rem; }
+    .status-card { border-radius: 20px; padding: 28px 18px; text-align: center; background: #fce8e6; transition: background .2s; }
+    .status-card.on { background: #e4f6e9; }
+    .drop { font-size: 42px; line-height: 1.2; }
+    .status { font-weight: 850; font-size: clamp(1.5rem, 7vw, 2rem); margin: 12px 0 8px; color: #b3261e; }
+    .on .status { color: #137333; }
+    .desc { margin: 0 0 22px; color: #4f5e55; }
+    .switch { border: 0; width: 176px; height: 64px; border-radius: 40px; padding: 7px; display: flex; align-items: center; cursor: pointer; gap: 12px; color: white; font-size: 1rem; font-weight: 800; background: #b3261e; margin: 0 auto; transition: background .2s; }
+    .switch.on { background: #16803d; flex-direction: row-reverse; }
+    .knob { width: 50px; height: 50px; flex: 0 0 50px; display: grid; place-items: center; border-radius: 50%; background: white; color: #b3261e; font-size: 23px; }
+    .switch.on .knob { color: #16803d; }
+    .switch-label { flex: 1; text-align: center; }
+    .meta { margin-top: 20px; padding: 14px; border-radius: 14px; background: #f6f8f7; font-size: .88rem; color: #59665e; line-height: 1.5; }
+    .meta strong { color: #24352b; }
+    .notice { margin-top: 16px; font-size: .82rem; color: #68756d; line-height: 1.5; }
+    .error { color: #b3261e; }
+    button:focus-visible { outline: 3px solid #3b82f6; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="logo" aria-hidden="true">💧</div>
+      <div><h1>Sai Malhar Society Water Supply</h1><p class="sub">Shared live status dashboard</p></div>
+    </header>
+    <section id="card" class="status-card" aria-live="polite">
+      <div class="drop" aria-hidden="true">💧</div>
+      <div id="status" class="status">CONNECTING…</div>
+      <p id="description" class="desc">Connecting to the shared status…</p>
+      <button id="switch" class="switch" type="button" disabled aria-label="Switch water supply status">
+        <span class="knob" aria-hidden="true">⏻</span><span id="switchLabel" class="switch-label">WAIT</span>
+      </button>
+    </section>
+    <section class="meta">
+      <div><strong>Last updated:</strong> <span id="updated">Waiting for connection</span></div>
+      <div><strong>Connection:</strong> <span id="connection">Not configured</span></div>
+    </section>
+    <p id="notice" class="notice">This page reports the status selected by a group member. It does not physically operate the water pump.</p>
+  </main>
+
+  <!-- Replace these two placeholders with values from your Supabase project. -->
+  <script>
+    const SUPABASE_URL = 'https://uzpneiwokhmafhvjfdkm.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_Rz34bHt3m5MZ_S9P8LgAuQ_4lLJfQjS';
+  </script>
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+    const $ = id => document.getElementById(id);
+    const card = $('card'), statusEl = $('status'), desc = $('description');
+    const btn = $('switch'), btnLabel = $('switchLabel'), updated = $('updated'), connection = $('connection'), notice = $('notice');
+    let supabase, busy = false;
+
+    function render(isOn, updatedAt) {
+      card.classList.toggle('on', !!isOn);
+      btn.classList.toggle('on', !!isOn);
+      statusEl.textContent = isOn ? 'WATER SUPPLY ON' : 'WATER SUPPLY OFF';
+      desc.textContent = isOn ? 'Water is currently available' : 'Water supply is currently stopped';
+      btnLabel.textContent = isOn ? 'ON' : 'OFF';
+      btn.setAttribute('aria-pressed', String(!!isOn));
+      updated.textContent = updatedAt ? new Date(updatedAt).toLocaleString('en-IN') : 'Not recorded';
+    }
+
+    async function init() {
+      if (SUPABASE_URL.startsWith('YOUR_') || SUPABASE_ANON_KEY.startsWith('YOUR_')) {
+        statusEl.textContent = 'SETUP REQUIRED';
+        desc.textContent = 'The Supabase connection settings are missing.';
+        connection.textContent = 'Not configured';
+        notice.classList.add('error');
+        notice.textContent = 'Follow README.txt to connect the shared database and publish this page. The switch will work for everyone after setup.';
+        return;
+      }
+      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data, error } = await supabase.from('water_status').select('*').eq('id', 1).maybeSingle();
+      if (error || !data) {
+        statusEl.textContent = 'SETUP ERROR';
+        desc.textContent = 'Could not load shared status. Check database setup.';
+        connection.textContent = error ? error.message : 'No status row found';
+        return;
+      }
+      render(data.is_on, data.updated_at);
+      connection.textContent = 'Connected';
+      btn.disabled = false;
+      supabase.channel('water-status-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'water_status', filter: 'id=eq.1' }, payload => {
+          if (payload.new) render(payload.new.is_on, payload.new.updated_at);
+        }).subscribe(state => {
+          if (state === 'SUBSCRIBED') connection.textContent = 'Live';
+        });
+    }
+
+    btn.addEventListener('click', async () => {
+      if (!supabase || busy) return;
+      busy = true; btn.disabled = true;
+      const next = !btn.classList.contains('on');
+      const { data, error } = await supabase.from('water_status').update({ is_on: next, updated_at: new Date().toISOString() }).eq('id', 1).select().maybeSingle();
+      if (error) {
+        connection.textContent = 'Update failed';
+        notice.classList.add('error');
+        notice.textContent = 'Could not update status: ' + error.message;
+      } else if (data) {
+        render(data.is_on, data.updated_at);
+        connection.textContent = 'Live';
+        notice.classList.remove('error');
+        notice.textContent = 'Status updated for everyone who opens this shared page. This does not physically operate the water pump.';
+      }
+      busy = false; btn.disabled = false;
+    });
+    init();
+  </script>
+</body>
+</html>
